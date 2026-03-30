@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pet-store2
+  namespace: pet-store-ns
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pet-store2
+  template:
+    metadata:
+      labels:
+        app: pet-store2
+    spec:
+      containers:
+        - name: pet-store2
+          image: pet-store-image:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: NINJA_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ninja-api-secret
+                  key: api-key
+            - name: MONGO_URL
+              value: "mongodb://mongodb-service:27017"
+            - name: STORE_COLLECTION
+              value: "petstore2"

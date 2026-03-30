@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pet-order-service
+  namespace: pet-store-ns
+spec:
+  selector:
+    app: pet-order
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP
