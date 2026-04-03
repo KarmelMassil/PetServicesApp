@@ -24,7 +24,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: ninja-api-secret
-                  key: api-key
+                  key: NINJA_API_KEY
             - name: MONGO_URL
               value: "mongodb://mongodb-service:27017"
             - name: STORE_COLLECTION
