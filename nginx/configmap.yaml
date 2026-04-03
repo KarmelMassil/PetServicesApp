@@ -10,28 +10,35 @@ data:
     }
 
     http {
+    
+        map "$request_method:$http_ownerpc" $pet_store_allowed {
+            ~^GET:              1;
+            ~:LovesPetsL2M3n4$ 1;
+            default             0;
+        }
+
         server {
             listen 80;
 
-            # GET /pet-types1[/...] → pet-store1 (rewrite strips the "1")
+            # /pet-types1[/...] → pet-store1
             location ~ ^/pet-types1 {
-                limit_except GET {
-                    deny all;
+                if ($pet_store_allowed = 0) {
+                    return 403;
                 }
                 rewrite ^/pet-types1(.*)$ /pet-types$1 break;
                 proxy_pass http://pet-store1-service:8000;
             }
 
-            # GET /pet-types2[/...] → pet-store2 (rewrite strips the "2")
+            # /pet-types2[/...] → pet-store2
             location ~ ^/pet-types2 {
-                limit_except GET {
-                    deny all;
+                if ($pet_store_allowed = 0) {
+                    return 403;
                 }
                 rewrite ^/pet-types2(.*)$ /pet-types$1 break;
                 proxy_pass http://pet-store2-service:8000;
             }
 
-            # POST /purchases → pet-order (K8s Service round-robins between replicas)
+            # /purchases → pet-order (K8s Service round-robins between replicas)
             location = /purchases {
                 limit_except POST {
                     deny all;
@@ -39,7 +46,7 @@ data:
                 proxy_pass http://pet-order-service:8080;
             }
 
-            # GET /transactions → pet-order (auth checked at service level)
+            # /transactions → pet-order (auth checked at service level)
             location = /transactions {
                 limit_except GET {
                     deny all;
