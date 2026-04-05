@@ -13,13 +13,11 @@ pictures_dir = "pictures"
 os.makedirs(pictures_dir, exist_ok=True)
 
 NINJA_API_KEY    = os.environ.get('NINJA_API_KEY')
-MONGO_URL        = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
-STORE_COLLECTION = os.environ.get('STORE_COLLECTION', 'petstore1')
+MONGO_URL        = os.environ.get('MONGO_URL')
+STORE_COLLECTION = os.environ.get('STORE_COLLECTION')
 
 
-# ---------------------------------------------------------------------------
-# MongoDB connection (with retry so the app waits for the DB to be ready)
-# ---------------------------------------------------------------------------
+# MongoDB connection
 def connect_to_mongo():
     for attempt in range(30):
         try:
@@ -35,13 +33,11 @@ def connect_to_mongo():
 
 mongo_client = connect_to_mongo()
 db           = mongo_client['petstoredb']
-col          = db[STORE_COLLECTION]                          # pet-type documents
-counters_col = db[f'{STORE_COLLECTION}_counters']            # ID counter
+col          = db[STORE_COLLECTION]
+counters_col = db[f'{STORE_COLLECTION}_counters']
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 def get_next_id() -> str:
     result = counters_col.find_one_and_update(
         {'_id': 'pet_type_id'},
@@ -53,12 +49,12 @@ def get_next_id() -> str:
 
 
 def norm(value):
-    """Lowercase a string, pass through other types unchanged."""
+    # Lowercase a string
     return value.lower() if isinstance(value, str) else value
 
 
 def format_output(doc: dict) -> dict:
-    """Convert a MongoDB pet-type document to the API response format."""
+    # Convert a MongoDB pet-type document to the API response format.
     return {
         'id':         doc['_id'],
         'type':       doc['type'],
@@ -70,9 +66,7 @@ def format_output(doc: dict) -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
-# Ninja API helpers (unchanged from assignment 1)
-# ---------------------------------------------------------------------------
+# Ninja API helpers 
 def get_animal_info_from_ninja(animal_name: str) -> Optional[dict]:
     api_url = 'https://api.api-ninjas.com/v1/animals'
     headers = {'X-Api-Key': NINJA_API_KEY}
@@ -132,8 +126,6 @@ def download_image(url: str, pet_name: str, pet_type: str) -> str:
             ext = 'jpg'
         elif url.lower().endswith('.png'):
             ext = 'png'
-        else:
-            ext = 'jpg'
 
         content = response.content
         if len(content) == 0:
@@ -180,9 +172,7 @@ def compare_dates(date1: str, date2: str, comparison: str) -> bool:
         return False
 
 
-# ---------------------------------------------------------------------------
 # Routes – /pet-types
-# ---------------------------------------------------------------------------
 @app.route('/pet-types', methods=['POST'])
 def create_pet_type():
     if not request.is_json:
@@ -194,7 +184,7 @@ def create_pet_type():
 
     pet_type_name = data['type']
 
-    # Case-insensitive duplicate check
+    # Duplicate check
     existing = col.find_one({'type': re.compile(f'^{re.escape(pet_type_name)}$', re.IGNORECASE)})
     if existing:
         return jsonify({"error": "Malformed data"}), 400
@@ -255,9 +245,7 @@ def get_pet_types():
     return jsonify([format_output(d) for d in results]), 200
 
 
-# ---------------------------------------------------------------------------
 # Routes – /pet-types/{id}
-# ---------------------------------------------------------------------------
 @app.route('/pet-types/<id>', methods=['GET'])
 def get_pet_type(id):
     doc = col.find_one({'_id': id})
@@ -277,9 +265,7 @@ def delete_pet_type(id):
     return '', 204
 
 
-# ---------------------------------------------------------------------------
 # Routes – /pet-types/{id}/pets
-# ---------------------------------------------------------------------------
 @app.route('/pet-types/<id>/pets', methods=['POST'])
 def create_pet(id):
     doc = col.find_one({'_id': id})
@@ -296,7 +282,7 @@ def create_pet(id):
     pet_name     = data['name']
     pet_name_key = norm(pet_name)
 
-    # Duplicate name check (case-insensitive)
+    # Duplicate name check
     if any(p['name_key'] == pet_name_key for p in doc.get('pets', [])):
         return jsonify({"error": "Malformed data"}), 400
 
@@ -350,9 +336,7 @@ def get_pets(id):
     return jsonify(results), 200
 
 
-# ---------------------------------------------------------------------------
 # Routes – /pet-types/{id}/pets/{name}
-# ---------------------------------------------------------------------------
 @app.route('/pet-types/<id>/pets/<n>', methods=['GET'])
 def get_pet(id, n):
     doc = col.find_one({'_id': id})
@@ -377,7 +361,7 @@ def delete_pet(id, n):
     if not pet:
         return jsonify({"error": "Not found"}), 404
 
-    # Delete local picture file if it exists (pictures are not persistent)
+    # Delete local picture file if it exists
     if pet['picture'] != 'NA':
         picture_path = os.path.join(pictures_dir, pet['picture'])
         if os.path.exists(picture_path):
@@ -429,7 +413,7 @@ def update_pet(id, n):
         except Exception:
             return jsonify({"error": "Malformed data"}), 400
     else:
-        # No new picture supplied – delete the old file (picture becomes NA)
+        # No new picture supplied, delete the old file if exists
         if pet['picture'] != 'NA':
             old_path = os.path.join(pictures_dir, pet['picture'])
             if os.path.exists(old_path):
@@ -449,9 +433,7 @@ def update_pet(id, n):
     return jsonify({'name': pet['name'], 'birthdate': birthdate, 'picture': picture}), 200
 
 
-# ---------------------------------------------------------------------------
 # Route – /pictures/{file_name}
-# ---------------------------------------------------------------------------
 @app.route('/pictures/<file_name>', methods=['GET'])
 def get_picture(file_name):
     picture_path = os.path.join(pictures_dir, file_name)
@@ -463,15 +445,11 @@ def get_picture(file_name):
         mimetype = 'image/jpeg'
     elif lower.endswith('.png'):
         mimetype = 'image/png'
-    else:
-        mimetype = 'application/octet-stream'
 
     return send_file(picture_path, mimetype=mimetype)
 
 
-# ---------------------------------------------------------------------------
-# Route – /kill  (for HA testing: causes the container to crash and restart)
-# ---------------------------------------------------------------------------
+# Route – /kill
 @app.route('/kill', methods=['GET'])
 def kill_container():
     os._exit(1)

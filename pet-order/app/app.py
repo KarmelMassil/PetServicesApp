@@ -7,17 +7,14 @@ import time
 
 app = Flask(__name__)
 
-MONGO_URL      = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
-PETSTORE1_URL  = os.environ.get('PETSTORE1_URL', 'http://pet-store1:8000')
-PETSTORE2_URL  = os.environ.get('PETSTORE2_URL', 'http://pet-store2:8000')
+MONGO_URL      = os.environ.get('MONGO_URL')
+PETSTORE1_URL  = os.environ.get('PETSTORE1_URL')
+PETSTORE2_URL  = os.environ.get('PETSTORE2_URL')
 OWNER_PC_VALUE = "LovesPetsL2M3n4"
-
 STORES = {1: PETSTORE1_URL, 2: PETSTORE2_URL}
 
 
-# ---------------------------------------------------------------------------
-# MongoDB connection (with retry)
-# ---------------------------------------------------------------------------
+# MongoDB connection 
 def connect_to_mongo():
     for attempt in range(30):
         try:
@@ -37,19 +34,17 @@ transactions_col = db['transactions']
 counters_col    = db['counters']
 
 
-def get_next_purchase_id() -> int:
+def get_next_purchase_id() -> str:
     result = counters_col.find_one_and_update(
         {'_id': 'purchase_id'},
         {'$inc': {'value': 1}},
         upsert=True,
         return_document=ReturnDocument.AFTER
     )
-    return result['value']
+    return str(result['value'])
 
 
-# ---------------------------------------------------------------------------
 # Pet-store helpers
-# ---------------------------------------------------------------------------
 def get_pet_type_and_pets(store_url: str, pet_type_name: str):
     """
     Query a pet-store for the given pet-type name (case-insensitive).
@@ -92,9 +87,7 @@ def delete_pet_from_store(store_url: str, pet_type_id: str, pet_name: str) -> bo
         return False
 
 
-# ---------------------------------------------------------------------------
 # POST /purchases
-# ---------------------------------------------------------------------------
 @app.route('/purchases', methods=['POST'])
 def create_purchase():
     if not request.is_json:
@@ -120,20 +113,26 @@ def create_purchase():
 
     purchaser     = data['purchaser']
     pet_type_name = data['pet-type']
-    store         = data.get('store', None)     # optional: 1 or 2
-    pet_name      = data.get('pet-name', None)  # optional, only if store given
+
+    if 'store' in data:
+        if not isinstance(data['store'], int) or data['store'] not in [1, 2]:
+            return jsonify({"error": "Malformed data"}), 400
+        store = data['store']
+    else:
+        store = None
+
+    if 'pet-name' in data:
+        if not isinstance(data['pet-name'], str) or not data['pet-name']:
+            return jsonify({"error": "Malformed data"}), 400
+        pet_name = data['pet-name']
+    else:
+        pet_name = None
 
     # pet-name can only appear when store is given
     if pet_name is not None and store is None:
         return jsonify({"error": "Malformed data"}), 400
 
-    # Validate store value
-    if store is not None and store not in [1, 2]:
-        return jsonify({"error": "Malformed data"}), 400
-
-    # -----------------------------------------------------------------------
     # Find and choose a pet
-    # -----------------------------------------------------------------------
     chosen_pet       = None
     chosen_store_num = None
     chosen_pt_id     = None
@@ -177,22 +176,18 @@ def create_purchase():
         chosen_pet, chosen_store_num, chosen_pt_id, chosen_store_url = \
             random.choice(all_options)
 
-    # -----------------------------------------------------------------------
     # Delete the chosen pet from its store
-    # -----------------------------------------------------------------------
     success = delete_pet_from_store(
         chosen_store_url, chosen_pt_id, chosen_pet['name']
     )
     if not success:
         return jsonify({"error": "No pet of this type is available"}), 400
 
-    # -----------------------------------------------------------------------
     # Assign purchase ID and store transaction in MongoDB
-    # -----------------------------------------------------------------------
     purchase_id = get_next_purchase_id()
 
     transaction_doc = {
-        '_id':         purchase_id,          # use purchase_id as Mongo _id
+        '_id':         purchase_id,
         'purchaser':   purchaser,
         'pet-type':    pet_type_name,
         'store':       chosen_store_num,
@@ -200,7 +195,7 @@ def create_purchase():
     }
     transactions_col.insert_one(transaction_doc)
 
-    # Return purchase object (includes pet-name; transaction does not)
+    # Return purchase object
     purchase = {
         'purchaser':   purchaser,
         'pet-type':    pet_type_name,
@@ -211,9 +206,7 @@ def create_purchase():
     return jsonify(purchase), 201
 
 
-# ---------------------------------------------------------------------------
-# GET /transactions  (owner only)
-# ---------------------------------------------------------------------------
+# GET /transactions
 @app.route('/transactions', methods=['GET'])
 def get_transactions():
     owner_pc = request.headers.get('OwnerPC', '')
@@ -222,12 +215,11 @@ def get_transactions():
 
     results = list(transactions_col.find({}, {'_id': 0}))
 
-    # Supported query-string fields (field names are case-sensitive)
+    # Supported query-string fields
     valid_fields = {'purchaser', 'pet-type', 'store', 'purchase-id'}
 
     for key, value in request.args.items():
         if key not in valid_fields:
-            # Invalid field → no results (same policy as assignment 1)
             results = []
             break
 
@@ -237,25 +229,21 @@ def get_transactions():
                 results = [t for t in results if t.get('store') == store_val]
             except ValueError:
                 results = []
+                
         elif key == 'purchase-id':
-            try:
-                pid_val = int(value)
-                results = [t for t in results if t.get('purchase-id') == pid_val]
-            except ValueError:
-                results = []
+            results = [t for t in results if t.get('purchase-id') == value]
+
         else:
-            # Case-insensitive string comparison for purchaser / pet-type
+            # For purchaser / pet-type
             results = [
                 t for t in results
-                if str(t.get(key, '')).lower() == value.lower()
+                if str(t.get(key)).lower() == value.lower()
             ]
 
     return jsonify(results), 200
 
 
-# ---------------------------------------------------------------------------
-# GET /kill  (forces the container to crash so Docker Compose restarts it)
-# ---------------------------------------------------------------------------
+# GET /kill  
 @app.route('/kill', methods=['GET'])
 def kill_container():
     os._exit(1)
