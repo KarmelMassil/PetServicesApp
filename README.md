@@ -1,5 +1,5 @@
 # Pet Services App
-This repository contains a Kubernetes deployment of a multi-service Pet Store application, developed for the Cloud Computing home assignment (2025-26). It deploys the pet-store and pet-order services from Assignments #1 and #2 as a load-balanced, persistent, namespaced system behind an NGINX reverse proxy.
+This repository contains a Kubernetes deployment of a multi-service Pet Store application, developed for the Cloud Computing home assignment 3 (2025-26). It deploys the pet-store and pet-order services from Assignments #1 and #2 as a load-balanced, persistent, namespaced system behind an NGINX reverse proxy.
 ## Features
 * **Multi-Instance Pet Store:** Two independent `pet-store` instances (`pet-store1`, `pet-store2`), each backed by its own MongoDB collection, implementing the same REST API as Assignments #1 and #2.
 * **Load-Balanced Pet Order Service:** Two replicas of `pet-order` behind a single Kubernetes Service, with atomic purchase-ID allocation in MongoDB to prevent double-purchases.
